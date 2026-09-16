@@ -82,11 +82,16 @@ class Player{
     this.music=c.createGain();this.music.gain.value=this.options.bgmVolume??.35;
     this.effects=c.createGain();this.effects.gain.value=this.options.sfxVolume??.8;
     this.music.connect(this.master);this.effects.connect(this.master);this.master.connect(c.destination);
-    const song=compose(),buffer=c.createBuffer(1,song.samples.length,song.sampleRate);buffer.copyToChannel(song.samples,0);
+   }
+   // Request playback while still inside the gesture, before synthesizing the song.
+   if(this.context.state!=='running'){
+    const resumed=this.context.resume();if(resumed?.then)resumed.then(()=>this.sync()).catch(()=>{});
+   }
+   if(!this.source){
+    const c=this.context,song=compose(),buffer=c.createBuffer(1,song.samples.length,song.sampleRate);buffer.copyToChannel(song.samples,0);
     this.source=c.createBufferSource();this.source.buffer=buffer;this.source.loop=true;this.source.connect(this.music);this.source.start();this.starts++;
    }
-   // Resume inside the pointer/keyboard gesture, including after an OS audio interruption.
-   const resumed=this.context.resume();if(resumed?.catch)resumed.catch(()=>{});this.sync();
+   this.sync();
   }catch{/* Audio must never interrupt gameplay on unsupported devices. */}
  }
  sync(){if(!this.master)return;const gain=this.master.gain,now=this.context.currentTime;gain.cancelScheduledValues(now);gain.setTargetAtTime(this.enabled&&!this.paused?1:0,now,.008);}

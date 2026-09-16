@@ -78,6 +78,11 @@ function drawResultTotal(value){
 }
 function displayResult(){resultShown=true;const won=game.mode==='won',total=game.coins+game.bonus;best=Math.max(best,total);try{localStorage.setItem('ninja-neko-dodge-best',String(best));}catch{}hideNotice();$('result').classList.remove('hidden');$('resultTitleText').textContent=won?'福がいっぱい！':'もう一度挑戦！';const titleAsset=cfg.assets[won?'resultWin':'resultLose'];$('resultTitleArt').src=assetUrl(titleAsset.src,titleAsset);$('resultTag').textContent=won?'福袋オープン！':'小さな忍者の大冒険';$('total').textContent=total;drawResultTotal(total);$('runCoins').textContent=game.coins;$('bonus').textContent=game.bonus;$('dodged').textContent=game.dodged;$('footerBest').textContent=best;$('resultTip').textContent='JUMP でもう一度！';$('tip').textContent=won?'福袋に幸運がいっぱい！もう一度冒険しよう！':'障害物を飛び越えて、もっと遠くへ！';$('jump').setAttribute('aria-label','JUMP、もう一度プレイ');}
 $('jump').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();$('jump').querySelector('img').src=cfg.assets.jumpButtonPressed.src;jump();});
+// Touch activation is granted on release, not pointerdown. Retry only audio so
+// a single tap never causes a second jump; muted audio stays muted.
+for(const event of ['pointerup','touchend','click'])$('device').addEventListener(event,e=>{
+ if(!e.target.closest?.('#sound')&&audio.context?.state!=='running')audio.unlock();
+},{capture:true,passive:true});
 const release=()=>{$('jump').querySelector('img').src=cfg.assets.jumpButton.src;};addEventListener('pointerup',release);addEventListener('pointercancel',release);$('jump').addEventListener('click',e=>{if(e.detail===0)jump();});
 $('pause').onclick=()=>{audio.unlock();pause();};$('sound').onclick=()=>{sound=!sound;audio.setEnabled(sound);$('sound').querySelector('img').src=cfg.assets[sound?'soundOn':'soundOff'].src;$('sound').setAttribute('aria-pressed',String(sound));$('sound').setAttribute('aria-label',sound?'音楽と効果音をオフ':'音楽と効果音をオン');tone(750);};
 addEventListener('keydown',e=>{if(['Space','ArrowUp','KeyW'].includes(e.code)){e.preventDefault();if(!e.repeat)jump();}else if(['KeyP','Escape'].includes(e.code)){e.preventDefault();if(!e.repeat)pause();}});
