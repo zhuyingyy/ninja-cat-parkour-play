@@ -6,7 +6,7 @@ const dust=[];let lastDustStep=-1;
 const sceneBuffer=document.createElement('canvas');sceneBuffer.width=780;sceneBuffer.height=799;const sceneCtx=sceneBuffer.getContext('2d');let renderedFrame=0,renderedPose='idle',layerOffsets={sky:0,far:0,near:0,ground:0};
 const skyCtx=$('sky').getContext('2d'),sakuraCanvas=$('sakura'),sakuraCtx=sakuraCanvas.getContext('2d'),groundCtx=$('ground').getContext('2d');
 try{best=Number(localStorage.getItem('ninja-neko-dodge-best'))||0;}catch{}$('footerBest').textContent=best;
-function fit(){const frameWidth=856,frameHeight=1696,s=Math.min(innerWidth/frameWidth,innerHeight/frameHeight,1);$('phone').style.transform=`scale(${s})`;$('viewport').style.width=frameWidth*s+'px';$('viewport').style.height=frameHeight*s+'px';}fit();addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);
+function fit(){const frameWidth=856,frameHeight=1696,s=Math.min(innerWidth/frameWidth,innerHeight/frameHeight,1),phone=$('phone');phone.style.left=12*s+'px';phone.style.transform=`scale(${s})`;$('viewport').style.width=frameWidth*s+'px';$('viewport').style.height=frameHeight*s+'px';}fit();addEventListener('resize',fit);window.visualViewport?.addEventListener('resize',fit);
 ctx.imageSmoothingEnabled=false;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const assetUrl=(src,a)=>!a.version||src.startsWith('data:')?src:src+(src.includes('?')?'&':'?')+'v='+encodeURIComponent(a.version);
