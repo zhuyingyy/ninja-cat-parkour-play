@@ -1,0 +1,18 @@
+# 背景分层与六帧奔跑 · 生成记录
+
+生成模式：内置 image_gen。角色母图与被遮挡背景修复使用参考图编辑生成；Figma 原生蒙版精确分割、导出 PNG。原有 21 张 PNG 未覆盖。
+
+六帧单图为 4×，图集为 2×；均检查实际 RGBA 透明通道。场景与地面保留原图像素；天空底图去除全部场景残影，远景补全原树木/灌木移开后显露的区域。第二半幅镜像延展，以保证循环两端衔接。
+
+## run-cycle
+
+Asset type: consistent pixel-art game sprite sheet. The supplied PNG is the exact character design to preserve: orange-and-cream ninja cat, identical headband emblem, navy outfit, gold bell, scarf flowing left, katana held pointing up-right. Produce exactly SIX distinct static RUNNING poses, arranged in a perfectly regular 3-column by 2-row grid, equal 232:166-aspect cells. Facing right in every frame. A proper run cycle: (1) front leg reaching forward, rear leg back; (2) planted front foot with bent supporting knee, rear foot lifting; (3) passing pose with legs gathered under hips; (4) opposite leg reaching forward and other leg back; (5) opposite foot planted and rear knee lifting; (6) both feet off the ground with knees tucked. Leg silhouettes must be clearly different between frames, with small coordinated arm/scarf/tail changes, head size and face identity locked. Same body scale, head center, sword angle, and ground baseline in every equal-sized cell. Entire character, tail, scarf and sword visible, generous empty gutter. Keep the EXACT existing polished pixel-art style, dark burgundy stair-step outlines and palette; no redesign, no different clothes or face, no attacking, no slash trail, no motion blur, no captions or numbers. High-resolution sheet about 2784 by 1328, one row has three frames, two rows total. Actual transparent alpha outside all sprites. Do not paint a checkerboard. If an opaque backing is unavoidable, use only perfectly flat bright magenta #ff00ff so it can be precisely clipped, never a checkerboard or textured backdrop.
+
+## sky-repair
+
+Use case: precise-object-edit / background restoration. Edit the supplied exact 780 x 1644 night-game backdrop for parallax layer separation, without redesigning it. ONLY in the central game region y455..1100: remove the left foreground tree trunk/canopy and hanging lantern, the distant village buildings and torii, and all low shrubs/foliage, restoring the dark cobalt-blue mottled night-sky texture that was hidden behind them. Keep the existing clouds and star marks in their exact locations, sizes and colors; preserve every pixel outside that y455..1100 region as closely as possible, including the entire top header/moon and the bridge, stones, water, bottom foliage below y1100. This is an occluded-background repair plate, NOT a new scene design. No new objects, no characters, no UI, no text, no gradient bands, no checkerboard. Same portrait composition and pixel-art surface texture. Opaque PNG.
+
+## far-repair
+
+Use case: precise-object-edit, restoring an occluded parallax background. Edit this supplied exact night-game background. ONLY in the central gameplay region y455..1094 of the 780x1644 layout, remove the large foreground tree with its wooden trunk/brackets and hanging paw lantern along the left edge, and remove the closest low shrub belt immediately above the wooden bridge. Reconstruct the distant blue village, dark-blue shrubbery and night-sky texture that would be behind those foreground objects. Keep the existing distant village buildings, roofs, lit windows, torii and middle-distance foliage in their exact locations and appearances everywhere they are already visible. Keep sky/clouds and the entire rest of the portrait outside this region unchanged. Do not remove the village. Do not add any new foreground tree, lantern, shrine, character or UI. No new art style: same polished cobalt/navy/teal pixel-art palette and scale. This is a repair plate used only beneath foreground cutouts, not a redesign. Output opaque PNG.
+
