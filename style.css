@@ -27,6 +27,9 @@
 .reward-total{display:block;line-height:0;flex-shrink:0}
 #totalDigits{display:block;image-rendering:pixelated}
 #coinFlights{position:absolute;inset:0;width:780px;height:1644px;pointer-events:none;z-index:4}
+img[data-asset]:not(.asset-ready){visibility:hidden}
+.asset-loading{position:absolute;z-index:8;left:80px;top:700px;width:620px;padding:28px;text-align:center;font-size:25px;line-height:1.6;background:#092d54f5;border:3px solid #59b3d0}
+#retryAssets{display:block;margin:18px auto 0;padding:12px 36px;color:#fff3d9;background:#b7372d;border:3px solid #ffbf57}
 .score-coin,.score{transform-origin:center}
 
 /* Phone presentation frame. The 780 × 1644 game coordinate system stays untouched. */

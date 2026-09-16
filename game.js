@@ -11,11 +11,55 @@ function fit(){const frameWidth=856,frameHeight=1696,s=Math.min(innerWidth/frame
 ctx.imageSmoothingEnabled=false;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const assetUrl=(src,a)=>!a.version||src.startsWith('data:')?src:src+(src.includes('?')?'&':'?')+'v='+encodeURIComponent(a.version);
-for(const [key,a]of Object.entries(cfg.assets)){
- const sources=a.sources||[a.src],frames=new Array(sources.length);let loaded=0;
- sources.forEach((src,index)=>{const i=new Image();i.onload=()=>{frames[index]=i;if(++loaded===sources.length)images[key]={...a,img:frames[0],frameImages:a.sources?frames:null};};i.onerror=()=>{errors.push(src);toast('画像を読み込めません：'+src);};i.src=assetUrl(src,a);});
+// Bound downloads and retry transient failures. A failed image never permanently
+// locks the start screen, and DOM images reuse the successfully loaded URL.
+const assetTasks=new Map(),assetQueue=[];let activeDownloads=0;
+for(const a of Object.values(cfg.assets))for(const src of a.sources||[a.src]){
+ const url=assetUrl(src,a);if(!assetTasks.has(url))assetTasks.set(url,{src,url,state:'queued',attempt:0,image:null});
 }
-for(const el of document.querySelectorAll('[data-asset]')){const a=cfg.assets[el.dataset.asset];if(a)el.src=assetUrl(a.src,a);}
+assetQueue.push(...assetTasks.values());
+function imageUrl(key){const a=images[key];return a?a.img.src:assetUrl(cfg.assets[key].src,cfg.assets[key]);}
+function updateAssetUI(){
+ errors.length=0;for(const task of assetTasks.values())if(task.state==='failed')errors.push(task.src);
+ for(const [key,a]of Object.entries(cfg.assets)){
+  if(images[key])continue;
+  const tasks=(a.sources||[a.src]).map(src=>assetTasks.get(assetUrl(src,a)));
+  if(tasks.every(task=>task.state==='loaded')){
+   const frames=tasks.map(task=>task.image);images[key]={...a,img:frames[0],frameImages:a.sources?frames:null};
+   for(const el of document.querySelectorAll(`[data-asset="${key}"]`)){
+    el.src=imageUrl(key);el.classList.add('asset-ready');
+   }
+  }
+ }
+ const ready=Object.keys(images).length===Object.keys(cfg.assets).length;
+ const done=[...assetTasks.values()].filter(task=>task.state==='loaded').length;
+ $('assetLoading').classList.toggle('hidden',ready);
+ $('assetProgress').textContent=errors.length?'画像を読み込めませんでした。通信を確認して再試行してください。':`読み込み中… ${Math.floor(done/assetTasks.size*100)}%`;
+ $('retryAssets').classList.toggle('hidden',!errors.length);
+ if(ready){$('toast').classList.remove('show');toastRemaining=0;}
+}
+function pumpAssets(){
+ while(activeDownloads<4&&assetQueue.length){
+  const task=assetQueue.shift();activeDownloads++;task.state='loading';task.attempt++;
+  const i=new Image();let settled=false;
+  const settle=success=>{
+   if(settled)return;settled=true;clearTimeout(timeout);i.onload=i.onerror=null;activeDownloads--;
+   if(success){task.image=i;task.state='loaded';}
+   else if(task.attempt<3){task.state='waiting';setTimeout(()=>{task.state='queued';assetQueue.push(task);pumpAssets();},task.attempt*800);}
+   else task.state='failed';
+   updateAssetUI();pumpAssets();
+  };
+  const timeout=setTimeout(()=>{settle(false);i.src='';},20000);
+  i.onload=()=>settle(i.naturalWidth>0);i.onerror=()=>settle(false);
+  i.src=task.attempt===1||task.url.startsWith('data:')?task.url:task.url+(task.url.includes('?')?'&':'?')+'retry='+Date.now()+'-'+task.attempt;
+ }
+}
+function retryAssets(){
+ for(const task of assetTasks.values())if(task.state==='failed'){task.state='queued';task.attempt=0;assetQueue.push(task);}
+ updateAssetUI();pumpAssets();
+}
+$('retryAssets').onclick=retryAssets;addEventListener('online',retryAssets);
+updateAssetUI();pumpAssets();
 function tone(f,d=.12){audio.tone(f,d);}
 function toast(s){$('toast').textContent=s;$('toast').classList.add('show');toastRemaining=2;}
 function burst(x,y,n=15){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random()-.5)*330,vy:-70-Math.random()*270,life:.5+Math.random()*.5,c:['#ffc65e','#ee583c','#54c9f7','#fff3d9'][i%4]});}
@@ -33,7 +77,7 @@ const game=new NekoEngine({...cfg.level,obstacleFloat:!reducedMotion},(event,e)=
 function showNotice(title,body,sub){$('noticeTitle').textContent=title;$('noticeText').textContent=body;$('noticeSub').textContent=sub;$('notice').classList.remove('hidden');}function hideNotice(){$('notice').classList.add('hidden');}
 function start(){if(Object.keys(images).length!==Object.keys(cfg.assets).length){toast(errors.length?'画像の読み込みに失敗しました。再読み込みしてください':'画像を読み込んでいます…');return;}game.start();$('device').classList.remove('ready');runTime=0;dust.length=0;lastDustStep=-1;paused=false;audio.setPaused(document.hidden);resultShown=false;resultAt=0;shake=0;particles.length=0;labels.length=0;hideNotice();$('result').classList.add('hidden');$('jump').setAttribute('aria-label','JUMP、ジャンプ・二段ジャンプ');$('pause').setAttribute('aria-label','一時停止');$('tip').textContent='タップでジャンプ、もう一度タップで二段ジャンプ';hud();}
 function pause(force){if(!['running','bag'].includes(game.mode))return;paused=force??!paused;audio.setPaused(paused||document.hidden);if(paused){showNotice('ひとやすみ','JUMP で冒険を続けよう','');$('jump').setAttribute('aria-label','JUMP、ゲームを再開');}else{if(game.mode==='bag')showNotice('特大福袋が登場！','福袋を開いています…','');else hideNotice();$('jump').setAttribute('aria-label','JUMP、ジャンプ・二段ジャンプ');}$('pause').setAttribute('aria-label',paused?'ゲームを再開':'一時停止');}
-function jump(){audio.unlock();if(paused){pause(false);return;}if(game.mode==='ready'||resultShown){start();return;}if(game.mode==='running')game.jump();}
+function jump(){audio.unlock();if(Object.keys(images).length!==Object.keys(cfg.assets).length){retryAssets();return;}if(paused){pause(false);return;}if(game.mode==='ready'||resultShown){start();return;}if(game.mode==='running')game.jump();}
 // Keep flights in the fixed device coordinate system, independent of world scrolling
 // and viewport scaling. Scores settle on arrival; the engine awards each coin once.
 function collectCoin(e){
@@ -76,15 +120,15 @@ function drawResultTotal(value){
  const cell=a.img.naturalWidth/10;
  [...text].forEach((digit,i)=>c.drawImage(a.img,Number(digit)*cell,0,cell,a.img.naturalHeight,i*160,0,160,208));
 }
-function displayResult(){resultShown=true;const won=game.mode==='won',total=game.coins+game.bonus;best=Math.max(best,total);try{localStorage.setItem('ninja-neko-dodge-best',String(best));}catch{}hideNotice();$('result').classList.remove('hidden');$('resultTitleText').textContent=won?'福がいっぱい！':'もう一度挑戦！';const titleAsset=cfg.assets[won?'resultWin':'resultLose'];$('resultTitleArt').src=assetUrl(titleAsset.src,titleAsset);$('resultTag').textContent=won?'福袋オープン！':'小さな忍者の大冒険';$('total').textContent=total;drawResultTotal(total);$('runCoins').textContent=game.coins;$('bonus').textContent=game.bonus;$('dodged').textContent=game.dodged;$('footerBest').textContent=best;$('resultTip').textContent='JUMP でもう一度！';$('tip').textContent=won?'福袋に幸運がいっぱい！もう一度冒険しよう！':'障害物を飛び越えて、もっと遠くへ！';$('jump').setAttribute('aria-label','JUMP、もう一度プレイ');}
-$('jump').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();$('jump').querySelector('img').src=cfg.assets.jumpButtonPressed.src;jump();});
+function displayResult(){resultShown=true;const won=game.mode==='won',total=game.coins+game.bonus;best=Math.max(best,total);try{localStorage.setItem('ninja-neko-dodge-best',String(best));}catch{}hideNotice();$('result').classList.remove('hidden');$('resultTitleText').textContent=won?'福がいっぱい！':'もう一度挑戦！';const titleKey=won?'resultWin':'resultLose';$('resultTitleArt').dataset.asset=titleKey;$('resultTitleArt').src=imageUrl(titleKey);$('resultTag').textContent=won?'福袋オープン！':'小さな忍者の大冒険';$('total').textContent=total;drawResultTotal(total);$('runCoins').textContent=game.coins;$('bonus').textContent=game.bonus;$('dodged').textContent=game.dodged;$('footerBest').textContent=best;$('resultTip').textContent='JUMP でもう一度！';$('tip').textContent=won?'福袋に幸運がいっぱい！もう一度冒険しよう！':'障害物を飛び越えて、もっと遠くへ！';$('jump').setAttribute('aria-label','JUMP、もう一度プレイ');}
+$('jump').addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();if(images.jumpButtonPressed)$('jump').querySelector('img').src=imageUrl('jumpButtonPressed');jump();});
 // Touch activation is granted on release, not pointerdown. Retry only audio so
 // a single tap never causes a second jump; muted audio stays muted.
 for(const event of ['pointerup','touchend','click'])$('device').addEventListener(event,e=>{
  if(!e.target.closest?.('#sound')&&audio.context?.state!=='running')audio.unlock();
 },{capture:true,passive:true});
-const release=()=>{$('jump').querySelector('img').src=cfg.assets.jumpButton.src;};addEventListener('pointerup',release);addEventListener('pointercancel',release);$('jump').addEventListener('click',e=>{if(e.detail===0)jump();});
-$('pause').onclick=()=>{audio.unlock();pause();};$('sound').onclick=()=>{sound=!sound;audio.setEnabled(sound);$('sound').querySelector('img').src=cfg.assets[sound?'soundOn':'soundOff'].src;$('sound').setAttribute('aria-pressed',String(sound));$('sound').setAttribute('aria-label',sound?'音楽と効果音をオフ':'音楽と効果音をオン');tone(750);};
+const release=()=>{if(images.jumpButton)$('jump').querySelector('img').src=imageUrl('jumpButton');};addEventListener('pointerup',release);addEventListener('pointercancel',release);$('jump').addEventListener('click',e=>{if(e.detail===0)jump();});
+$('pause').onclick=()=>{audio.unlock();pause();};$('sound').onclick=()=>{sound=!sound;audio.setEnabled(sound);const soundKey=sound?'soundOn':'soundOff';$('sound').querySelector('img').dataset.asset=soundKey;if(images[soundKey]){$('sound').querySelector('img').src=imageUrl(soundKey);$('sound').querySelector('img').classList.add('asset-ready');}$('sound').setAttribute('aria-pressed',String(sound));$('sound').setAttribute('aria-label',sound?'音楽と効果音をオフ':'音楽と効果音をオン');tone(750);};
 addEventListener('keydown',e=>{if(['Space','ArrowUp','KeyW'].includes(e.code)){e.preventDefault();if(!e.repeat)jump();}else if(['KeyP','Escape'].includes(e.code)){e.preventDefault();if(!e.repeat)pause();}});
 addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);audio.setPaused(paused||document.hidden);});
 function hud(){
