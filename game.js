@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id),cfg=NEKO_CONFIG,canvas=$('game'),ctx=can
 const scale=1.5,playerX=160,groundY=659;let time=0,last=0,runTime=0,paused=false,sound=true,shake=0,resultAt=0,resultShown=false,best=0,toastRemaining=0;
 const audio=new NekoAudio.Player(cfg.audio);
 const dust=[];let lastDustStep=-1;
+const coinFlights=[],coinFlightCtx=$('coinFlights').getContext('2d'),scoreCoin=document.querySelector('.score-coin');let coinImpact=0;
 const sceneBuffer=document.createElement('canvas');sceneBuffer.width=780;sceneBuffer.height=799;const sceneCtx=sceneBuffer.getContext('2d');let renderedFrame=0,renderedPose='idle',layerOffsets={sky:0,far:0,near:0,ground:0};
 const skyCtx=$('sky').getContext('2d'),sakuraCanvas=$('sakura'),sakuraCtx=sakuraCanvas.getContext('2d'),groundCtx=$('ground').getContext('2d');
 try{best=Number(localStorage.getItem('ninja-neko-dodge-best'))||0;}catch{}$('footerBest').textContent=best;
@@ -21,8 +22,9 @@ function burst(x,y,n=15){for(let i=0;i<n;i++)particles.push({x,y,vx:(Math.random
 function float(x,y,text,asset=null){labels.push({x,y,text,asset,life:1.2});}
 const sx=x=>(x-game.distance)*scale+playerX,sy=y=>groundY+(y-460)*scale;
 const game=new NekoEngine({...cfg.level,obstacleFloat:!reducedMotion},(event,e)=>{
+ if(event==='start'){coinFlights.length=0;coinImpact=0;}
  if(event==='jump'){tone(e.double?750:500);burst(playerX,sy(e.y),8);}
- if(event==='coin'){burst(sx(e.x),sy(e.y)-30,8);float(sx(e.x),sy(e.y)-85,'+'+e.value,'gainLabel');tone(1150,.08);}
+ if(event==='coin'){collectCoin(e);burst(sx(e.x),sy(e.y)-30,8);float(sx(e.x),sy(e.y)-85,'+'+e.value,'gainLabel');tone(1150,.08);}
  if(event==='hurt'){shake=9;tone(130,.2);float(playerX,sy(game.y)-170,'気をつけて！','warningLabel');}
  if(event==='finish'){showNotice('特大福袋が登場！','福袋を開いています…','');burst(560,500,24);tone(900,.3);}
  if(event==='win'){burst(560,500,90);float(560,370,'福袋 +'+e.bonus);hideNotice();resultAt=time+1.1;}
@@ -32,6 +34,40 @@ function showNotice(title,body,sub){$('noticeTitle').textContent=title;$('notice
 function start(){if(Object.keys(images).length!==Object.keys(cfg.assets).length){toast(errors.length?'画像の読み込みに失敗しました。再読み込みしてください':'画像を読み込んでいます…');return;}game.start();$('device').classList.remove('ready');runTime=0;dust.length=0;lastDustStep=-1;paused=false;audio.setPaused(document.hidden);resultShown=false;resultAt=0;shake=0;particles.length=0;labels.length=0;hideNotice();$('result').classList.add('hidden');$('jump').setAttribute('aria-label','JUMP、ジャンプ・二段ジャンプ');$('pause').setAttribute('aria-label','一時停止');$('tip').textContent='タップでジャンプ、もう一度タップで二段ジャンプ';hud();}
 function pause(force){if(!['running','bag'].includes(game.mode))return;paused=force??!paused;audio.setPaused(paused||document.hidden);if(paused){showNotice('ひとやすみ','JUMP で冒険を続けよう','');$('jump').setAttribute('aria-label','JUMP、ゲームを再開');}else{if(game.mode==='bag')showNotice('特大福袋が登場！','福袋を開いています…','');else hideNotice();$('jump').setAttribute('aria-label','JUMP、ジャンプ・二段ジャンプ');}$('pause').setAttribute('aria-label',paused?'ゲームを再開':'一時停止');}
 function jump(){audio.unlock();if(paused){pause(false);return;}if(game.mode==='ready'||resultShown){start();return;}if(game.mode==='running')game.jump();}
+// Keep flights in the fixed device coordinate system, independent of world scrolling
+// and viewport scaling. Scores settle on arrival; the engine awards each coin once.
+function collectCoin(e){
+ if(reducedMotion){coinImpact=.3;return;}
+ const a=cfg.assets.coin,bob=Math.sin(time*Math.PI*2/1.8)*5;
+ coinFlights.push({x:sx(e.x),y:document.querySelector('.scene').offsetTop+sy(e.y)-a.height/2+bob,age:0,value:e.value});
+}
+function flightPoint(f,t,target){
+ const u=1-t;
+ return{x:u*u*u*f.x+3*u*u*t*(f.x+65)+3*u*t*t*(target.x-85)+t*t*t*target.x,
+ y:u*u*u*f.y+3*u*u*t*(f.y-135)+3*u*t*t*(target.y+160)+t*t*t*target.y};
+}
+function drawCoinFlights(dt){
+ const c=coinFlightCtx;c.clearRect(0,0,780,1644);c.imageSmoothingEnabled=false;
+ const target={x:scoreCoin.offsetLeft+scoreCoin.offsetWidth/2,y:scoreCoin.offsetTop+scoreCoin.offsetHeight/2};
+ if(!paused){
+  coinImpact=Math.max(0,coinImpact-dt);
+  for(let i=coinFlights.length-1;i>=0;i--){const f=coinFlights[i];f.age+=dt;if(f.age>=.72){coinFlights.splice(i,1);coinImpact=.3;}}
+ }
+ for(const f of coinFlights){
+  const progress=Math.max(0,Math.min(1,(f.age-.08)/.64)),t=progress*progress,p=flightPoint(f,t,target);
+  for(let j=4;j>=1;j--){const tail=flightPoint(f,Math.max(0,t-j*.035),target);c.globalAlpha=(1-j/5)*.55*progress;c.fillStyle=j%2?'#ffcc57':'#fff5d6';c.fillRect(Math.round(tail.x-3),Math.round(tail.y-3),6,6);}
+  c.globalAlpha=1;const pop=1+.14*Math.sin(Math.min(1,f.age/.16)*Math.PI),w=62*pop*(1-.42*t),h=70*pop*(1-.42*t);
+  if(images.coin)c.drawImage(images.coin.img,Math.round(p.x-w/2),Math.round(p.y-h/2),Math.round(w),Math.round(h));
+ }
+ const pulse=coinImpact?Math.sin((1-coinImpact/.3)*Math.PI):0;
+ scoreCoin.style.transform=`scale(${1+pulse*(reducedMotion?.07:.22)})`;
+ $('scoreLive').style.transform=`scale(${1+pulse*.06})`;
+ if(coinImpact&&!reducedMotion){
+  c.globalAlpha=coinImpact/.3;c.fillStyle='#fff2ac';const radius=28+(1-coinImpact/.3)*22;
+  for(let i=0;i<6;i++){const angle=i*Math.PI/3,x=Math.round(target.x+Math.cos(angle)*radius),y=Math.round(target.y+Math.sin(angle)*radius);c.fillRect(x-5,y-2,10,4);c.fillRect(x-2,y-5,4,10);}
+ }
+ c.globalAlpha=1;
+}
 function drawResultTotal(value){
  const text=String(value),target=$('totalDigits'),a=images.digits;
  target.width=text.length*160;target.height=208;
@@ -47,7 +83,7 @@ $('pause').onclick=()=>{audio.unlock();pause();};$('sound').onclick=()=>{sound=!
 addEventListener('keydown',e=>{if(['Space','ArrowUp','KeyW'].includes(e.code)){e.preventDefault();if(!e.repeat)jump();}else if(['KeyP','Escape'].includes(e.code)){e.preventDefault();if(!e.repeat)pause();}});
 addEventListener('blur',()=>pause(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)pause(true);audio.setPaused(paused||document.hidden);});
 function hud(){
- const score=String(game.coins).padStart(4,'0');$('coins').textContent=score;const scoreCtx=$('scoreDigits').getContext('2d');scoreCtx.imageSmoothingEnabled=false;scoreCtx.clearRect(0,0,640,208);if(images.digits){const strip=images.digits.img,cell=strip.naturalWidth/10;for(let i=0;i<4;i++)scoreCtx.drawImage(strip,Number(score[i])*cell,0,cell,strip.naturalHeight,i*160,0,160,208);}
+ const score=String(game.coins-coinFlights.reduce((total,f)=>total+f.value,0)).padStart(4,'0');$('coins').textContent=score;const scoreCtx=$('scoreDigits').getContext('2d');scoreCtx.imageSmoothingEnabled=false;scoreCtx.clearRect(0,0,640,208);if(images.digits){const strip=images.digits.img,cell=strip.naturalWidth/10;for(let i=0;i<4;i++)scoreCtx.drawImage(strip,Number(score[i])*cell,0,cell,strip.naturalHeight,i*160,0,160,208);}
  $('health').setAttribute('aria-label','ライフ '+game.hearts);
  $('health').querySelectorAll('.hearts img').forEach((el,i)=>{el.style.filter=i<game.hearts?'none':'brightness(.2) saturate(.4)';});
  $('distance').textContent=Math.floor(game.distance/10)+' / '+cfg.level.length/10+' m';
@@ -124,7 +160,7 @@ function draw(dt){if(!paused){time+=dt;game.update(dt);if(game.mode==='running'&
   const a=l.asset&&images[l.asset];
   if(a){const age=1.2-l.life,pop=reducedMotion?1:1+.12*Math.sin(Math.min(1,age/.18)*Math.PI),w=Math.round(a.width*pop),h=Math.round(a.height*pop);ctx.drawImage(a.img,Math.round(Math.max(8,Math.min(772-w,l.x-w/2))),Math.round(l.y-h/2),w,h);}
   else{ctx.font='900 34px monospace';ctx.textAlign='center';ctx.lineJoin='miter';ctx.strokeStyle='#ffffff';ctx.lineWidth=12;ctx.strokeText(l.text,l.x,l.y);ctx.strokeStyle='#15212c';ctx.lineWidth=8;ctx.strokeText(l.text,l.x,l.y);ctx.fillStyle='#fffdf2';ctx.fillText(l.text,l.x,l.y);}
- }ctx.globalAlpha=1;ctx.restore();hud();if(resultAt&&time>=resultAt){resultAt=0;displayResult();}}
+ }ctx.globalAlpha=1;ctx.restore();if(resultAt&&time>=resultAt){resultAt=0;coinFlights.length=0;coinImpact=0;displayResult();}drawCoinFlights(dt);hud();}
 function frame(now){const dt=last?Math.min(.0334,(now-last)/1000):.016;last=now;draw(dt);requestAnimationFrame(frame);}requestAnimationFrame(frame);
 window.nekoSnapshot=()=>({mode:game.mode,distance:game.distance,speed:game.speedAt(),coins:game.coins,hearts:game.hearts,jumps:game.jumps,y:game.y,paused,bonus:game.bonus,dodged:game.dodged,resultShown,design:{...cfg.design},assetErrors:[...errors],loadedAssets:Object.keys(images).length,audio:audio.snapshot(),motion:{dust:dust.map(p=>({x:p.x,y:p.y,age:p.age})),pose:renderedPose,frame:renderedFrame,runTime,layerOffsets:{...layerOffsets}}});
 })();
